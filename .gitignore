@@ -1,0 +1,9 @@
+.venv/
+.pycache/
+__pycache__/
+data/
+*.log
+node_modules/
+.next/
+backend/spring-api/target/
+backend/scraper-worker/__pycache__/

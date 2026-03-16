@@ -1,0 +1,9 @@
+.git
+.gitignore
+.next
+.venv
+node_modules
+__pycache__
+backend/scraper-worker/__pycache__
+data/prices.db
+*.pyc
