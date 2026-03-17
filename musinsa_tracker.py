@@ -173,15 +173,23 @@ class MusinsaTracker:
             raise RuntimeError("상품 저장 실패")
 
         created = cur.rowcount != 0
+        message = "이미 등록된 상품 URL입니다."
+
+        if created:
+            message = "상품 등록 완료. 초기 가격은 백그라운드에서 확인 중입니다."
+            try:
+                html_result = self._fetch_html_snapshot(clean_url)
+                if html_result is not None:
+                    self._record_price(row["id"], name, html_result)
+                    row = self.conn.execute("SELECT * FROM products WHERE id = ?", (row["id"],)).fetchone()
+                    message = "상품 등록 완료."
+            except Exception:
+                pass
 
         return {
             "created": created,
             "product": self._row_to_product(row),
-            "message": (
-                "상품 등록 완료. 초기 가격은 백그라운드에서 확인 중입니다."
-                if created
-                else "이미 등록된 상품 URL입니다."
-            ),
+            "message": message,
         }
 
     def refresh_product(self, product_id: int) -> dict:
