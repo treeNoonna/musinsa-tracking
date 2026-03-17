@@ -1,4 +1,4 @@
-app = "musinsa-price-tracker-juwon-20260317"
+app = "musinsa-tracking"
 primary_region = "nrt"
 
 [build]

@@ -423,6 +423,18 @@ select {
   word-break: break-all;
 }
 
+.productLink {
+  display: inline-block;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .badge {
   display: inline-flex;
   align-items: center;
@@ -441,6 +453,7 @@ select {
   margin-top: 10px;
   font-size: 0.9rem;
   font-weight: 700;
+  white-space: pre-line;
 }
 
 .good {
@@ -448,6 +461,7 @@ select {
   margin-top: 10px;
   font-size: 0.9rem;
   font-weight: 700;
+  white-space: pre-line;
 }
 
 .loadingOverlay {

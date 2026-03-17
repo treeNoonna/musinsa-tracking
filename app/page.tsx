@@ -27,6 +27,17 @@ function shortDateTime(value: string | null): string {
   });
 }
 
+function cleanProductLabel(value: string | null | undefined): string {
+  if (!value) {
+    return "Selected product";
+  }
+  return value
+    .replace(/\s*[-|]\s*사이즈\s*&\s*후기\s*\|\s*무신사\s*$/u, "")
+    .replace(/\s*-\s*사이즈\s*&\s*후기\s*$/u, "")
+    .replace(/\s*\|\s*무신사\s*$/u, "")
+    .trim();
+}
+
 export default function Page() {
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -127,7 +138,7 @@ export default function Page() {
         throw new Error(data.error ?? "failed to add product");
       }
 
-      setMessage(data.message ?? "상품 등록 완료.");
+      setMessage(data.message ?? "Product added.");
       setUrl("");
 
       await loadProducts();
@@ -145,7 +156,7 @@ export default function Page() {
   async function updateAll() {
     setSyncing(true);
     setSyncingId("all");
-    setBusyMessage("무신사에서 전체 상품 가격을 확인하는 중...");
+    setBusyMessage("전체 상품 가격을 확인하는 중...");
     setMessage(null);
     setError(null);
     try {
@@ -160,7 +171,7 @@ export default function Page() {
       }
 
       const okCount = (data.updates ?? []).filter((u) => u.ok).length;
-      setMessage(`${okCount}개 상품 가격 갱신 완료`);
+      setMessage(`${okCount} products updated`);
       await loadProducts();
       if (selectedId) {
         await loadProductDetails(selectedId);
@@ -176,10 +187,10 @@ export default function Page() {
 
   async function updateOne(id: number) {
     const target = products.find((product) => product.id === id);
-    const label = target?.name ?? "선택한 상품";
+    const label = cleanProductLabel(target?.name);
     setSyncing(true);
     setSyncingId(id);
-    setBusyMessage(`${label} 가격 정보를 가져오는 중...`);
+    setBusyMessage(`${label} 가격 정보 업데이트중...`);
     setMessage(null);
     setError(null);
 
@@ -192,9 +203,9 @@ export default function Page() {
 
       const one = data.updates?.[0];
       if (one?.ok) {
-        setMessage(`${label} 가격 갱신: ${krw(one.price)}`);
+        setMessage(`${label}\nPrice updated: ${krw(one.price)}`);
       } else {
-        setError(one?.error ?? `${label} 가격 갱신 실패`);
+        setError(one?.error ?? `${label} price update failed`);
       }
 
       await loadProducts();
@@ -212,7 +223,7 @@ export default function Page() {
 
   async function deleteOne(id: number) {
     const target = products.find((product) => product.id === id);
-    const label = target?.name ?? "선택한 상품";
+    const label = cleanProductLabel(target?.name);
     setSyncing(true);
     setSyncingId(id);
     setBusyMessage(`${label} 상품을 삭제하는 중...`);
@@ -226,7 +237,7 @@ export default function Page() {
         throw new Error(data.error ?? "failed to delete product");
       }
 
-      setMessage(`${label} 상품 삭제 완료`);
+      setMessage(`${label}\nProduct deleted`);
       await loadProducts();
       setHistory(null);
       setSelectedId((current) => {
@@ -263,7 +274,7 @@ export default function Page() {
           <div>
             <span className="eyebrow">MUSINSA ARCHIVE</span>
             <h1>Musinsa Price Tracker</h1>
-            <p>등록된 무신사 상품 가격을 트래킹 합니다.</p>
+            <p>무신사 상품 가격 트래킹</p>
           </div>
           <div className="controls">
             <button
@@ -282,7 +293,7 @@ export default function Page() {
         <section className="layout">
           <div className="left">
           <article className="card">
-            <h2>상품 등록</h2>
+            <h2>Add Product</h2>
             <form className="controls" onSubmit={handleAdd}>
               <input
                 className="input inputGrow"
@@ -303,7 +314,7 @@ export default function Page() {
           </article>
 
           <article className="card">
-            <h2>등록 상품</h2>
+            <h2>Tracked Products</h2>
             {products.length === 0 ? (
               <p className="empty">등록된 상품이 없습니다.</p>
             ) : (
@@ -311,10 +322,10 @@ export default function Page() {
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>상품</th>
-                      <th className="colPrice">현재가</th>
-                      <th className="colChecked">체크 시간</th>
-                      <th className="colActions">동작</th>
+                      <th>Products</th>
+                      <th className="colPrice">Current</th>
+                      <th className="colChecked">Updated</th>
+                      <th className="colActions">Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -334,7 +345,16 @@ export default function Page() {
                             )}
                             <div>
                               <div>{p.name ?? "(이름없음)"}</div>
-                              <div className="empty mono">{p.url}</div>
+                              <button
+                                className="productLink empty mono"
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  window.open(p.url, "_blank", "noopener,noreferrer");
+                                }}
+                              >
+                                {p.url}
+                              </button>
                             </div>
                           </div>
                         </td>
@@ -380,7 +400,7 @@ export default function Page() {
 
           <aside className="right">
             <article className="card">
-              <h2>선택 상품 요약</h2>
+              <h2>Summary</h2>
               {!selected ? (
                 <p className="empty">상품을 선택하세요.</p>
               ) : (

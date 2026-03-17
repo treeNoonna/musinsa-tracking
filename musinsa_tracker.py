@@ -217,7 +217,8 @@ class MusinsaTracker:
         normalized = MusinsaTracker._normalize_text(text) or None
         if normalized is None:
             return None
-        normalized = re.sub(r"\s*-\s*사이즈\s*&\s*후기\s*\|\s*무신사\s*$", "", normalized)
+        normalized = re.sub(r"\s*[-|]\s*사이즈\s*&\s*후기\s*\|\s*무신사\s*$", "", normalized)
+        normalized = re.sub(r"\s*-\s*사이즈\s*&\s*후기\s*$", "", normalized)
         normalized = re.sub(r"\s*\|\s*무신사\s*$", "", normalized)
         return normalized.strip()
 
@@ -261,7 +262,7 @@ class MusinsaTracker:
     ) -> tuple[str | None, str]:
         checked_at = now_iso()
         checked_day = today_kst()
-        new_name = existing_name or result.title
+        new_name = result.title or self._clean_product_title(existing_name)
 
         history_row = self.conn.execute(
             """
