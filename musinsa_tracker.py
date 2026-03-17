@@ -309,78 +309,106 @@ class MusinsaTracker:
 
     def _get_page_snapshot(self, url: str) -> tuple[str | None, str | None, str, list[str]]:
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(
-                headless=True,
-                args=[
-                    "--disable-dev-shm-usage",
-                    "--disable-gpu",
-                    "--disable-setuid-sandbox",
-                    "--no-sandbox",
-                    "--no-zygote",
-                    "--single-process",
-                ],
-                timeout=30_000,
-            )
-            context = browser.new_context(
-                locale="ko-KR",
-                user_agent=(
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/135.0.0.0 Safari/537.36"
-                ),
-                viewport={"width": 1440, "height": 1200},
-                ignore_https_errors=True,
-            )
-            page = context.new_page()
-            try:
-                page.goto(url, wait_until="domcontentloaded", timeout=45_000)
+            launch_attempts = [
+                {
+                    "headless": True,
+                    "args": [
+                        "--disable-dev-shm-usage",
+                        "--disable-gpu",
+                        "--disable-setuid-sandbox",
+                        "--no-sandbox",
+                    ],
+                    "timeout": 30_000,
+                },
+                {
+                    "headless": True,
+                    "args": [
+                        "--disable-dev-shm-usage",
+                        "--disable-gpu",
+                        "--no-sandbox",
+                        "--no-zygote",
+                    ],
+                    "timeout": 30_000,
+                },
+            ]
+            last_error: Exception | None = None
+
+            for launch_options in launch_attempts:
+                browser = None
+                context = None
                 try:
-                    page.wait_for_load_state("networkidle", timeout=8_000)
-                except PlaywrightTimeoutError:
-                    pass
-                page.wait_for_timeout(1_500)
-                snapshot = page.evaluate(
-                    """
-                    () => {
-                      const clean = (value) => (value || "").replace(/\\s+/g, " ").trim();
-                      const title = clean(
-                        document.querySelector("h1")?.textContent ||
-                        document.querySelector('meta[property="og:title"]')?.getAttribute("content") ||
-                        document.title
-                      ) || null;
-                      const imageUrl =
-                        document.querySelector('meta[property="og:image"]')?.getAttribute("content") ||
-                        document.querySelector('meta[name="twitter:image"]')?.getAttribute("content") ||
-                        document.querySelector("img[src]")?.getAttribute("src") ||
-                        null;
-                      const bodyText = clean(document.body?.innerText || "");
-                      const matcher = /(최대\\s*혜택가|최종\\s*혜택가|혜택가)/i;
-                      const contexts = [];
-                      const seen = new Set();
-                      for (const el of Array.from(document.querySelectorAll("body *"))) {
-                        const text = clean(el.innerText);
-                        if (!text || text.length > 220 || !matcher.test(text)) {
-                          continue;
+                    browser = playwright.chromium.launch(**launch_options)
+                    context = browser.new_context(
+                        locale="ko-KR",
+                        user_agent=(
+                            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                            "AppleWebKit/537.36 (KHTML, like Gecko) "
+                            "Chrome/135.0.0.0 Safari/537.36"
+                        ),
+                        viewport={"width": 1440, "height": 1200},
+                        ignore_https_errors=True,
+                    )
+                    page = context.new_page()
+                    page.goto(url, wait_until="domcontentloaded", timeout=45_000)
+                    try:
+                        page.wait_for_load_state("networkidle", timeout=8_000)
+                    except PlaywrightTimeoutError:
+                        pass
+                    page.wait_for_timeout(1_500)
+                    snapshot = page.evaluate(
+                        """
+                        () => {
+                          const clean = (value) => (value || "").replace(/\\s+/g, " ").trim();
+                          const title = clean(
+                            document.querySelector("h1")?.textContent ||
+                            document.querySelector('meta[property="og:title"]')?.getAttribute("content") ||
+                            document.title
+                          ) || null;
+                          const imageUrl =
+                            document.querySelector('meta[property="og:image"]')?.getAttribute("content") ||
+                            document.querySelector('meta[name="twitter:image"]')?.getAttribute("content") ||
+                            document.querySelector("img[src]")?.getAttribute("src") ||
+                            null;
+                          const bodyText = clean(document.body?.innerText || "");
+                          const matcher = /(최대\\s*혜택가|최종\\s*혜택가|혜택가)/i;
+                          const contexts = [];
+                          const seen = new Set();
+                          for (const el of Array.from(document.querySelectorAll("body *"))) {
+                            const text = clean(el.innerText);
+                            if (!text || text.length > 220 || !matcher.test(text)) {
+                              continue;
+                            }
+                            const contextText = clean(
+                              el.closest("section, article, div, li")?.innerText ||
+                              el.parentElement?.innerText ||
+                              text
+                            );
+                            if (!contextText || contextText.length > 500 || seen.has(contextText)) {
+                              continue;
+                            }
+                            seen.add(contextText);
+                            contexts.push(contextText);
+                          }
+                          return { title, imageUrl, bodyText, contexts };
                         }
-                        const contextText = clean(
-                          el.closest("section, article, div, li")?.innerText ||
-                          el.parentElement?.innerText ||
-                          text
-                        );
-                        if (!contextText || contextText.length > 500 || seen.has(contextText)) {
-                          continue;
-                        }
-                        seen.add(contextText);
-                        contexts.push(contextText);
-                      }
-                      return { title, imageUrl, bodyText, contexts };
-                    }
-                    """
-                )
-                return snapshot["title"], snapshot["imageUrl"], snapshot["bodyText"], snapshot["contexts"]
-            finally:
-                context.close()
-                browser.close()
+                        """
+                    )
+                    return snapshot["title"], snapshot["imageUrl"], snapshot["bodyText"], snapshot["contexts"]
+                except Exception as exc:
+                    last_error = exc
+                finally:
+                    if context is not None:
+                        try:
+                            context.close()
+                        except Exception:
+                            pass
+                    if browser is not None:
+                        try:
+                            browser.close()
+                        except Exception:
+                            pass
+
+            raise RuntimeError(f"브라우저 실행 실패: {last_error}")
 
     def _price_candidates(self, body_text: str, labeled_contexts: list[str]) -> tuple[list[int], list[int], list[int]]:
         labeled_values: list[int] = []
