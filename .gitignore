@@ -7,3 +7,5 @@ node_modules/
 .next/
 backend/spring-api/target/
 backend/scraper-worker/__pycache__/
+.vercel
+.env*.local
