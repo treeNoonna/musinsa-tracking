@@ -4,6 +4,7 @@ const BACKEND_BASE =
   process.env.BACKEND_API_BASE_URL ??
   process.env.NEXT_PUBLIC_API_BASE_URL ??
   "http://127.0.0.1:8000";
+const PROXY_TIMEOUT_MS = 90_000;
 
 function buildTargetUrl(req: NextRequest, path: string[]) {
   const base = BACKEND_BASE.replace(/\/$/, "");
@@ -19,26 +20,40 @@ async function proxy(req: NextRequest, context: { params: Promise<{ path: string
   const targetUrl = buildTargetUrl(req, path);
   const body =
     req.method === "GET" || req.method === "HEAD" ? undefined : await req.text();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
 
-  const upstream = await fetch(targetUrl, {
-    method: req.method,
-    headers: {
-      "Content-Type": req.headers.get("content-type") ?? "application/json",
-    },
-    body,
-    cache: "no-store",
-  });
+  try {
+    const upstream = await fetch(targetUrl, {
+      method: req.method,
+      headers: {
+        "Content-Type": req.headers.get("content-type") ?? "application/json",
+      },
+      body,
+      cache: "no-store",
+      signal: controller.signal,
+    });
 
-  const contentType = upstream.headers.get("content-type") ?? "application/json; charset=utf-8";
-  const payload = await upstream.text();
+    const contentType = upstream.headers.get("content-type") ?? "application/json; charset=utf-8";
+    const payload = await upstream.text();
 
-  return new Response(payload, {
-    status: upstream.status,
-    headers: {
-      "Content-Type": contentType,
-      "Cache-Control": "no-store",
-    },
-  });
+    return new Response(payload, {
+      status: upstream.status,
+      headers: {
+        "Content-Type": contentType,
+        "Cache-Control": "no-store",
+      },
+    });
+  } catch (error) {
+    const message =
+      error instanceof DOMException && error.name === "AbortError"
+        ? "백엔드 응답 시간이 초과되었습니다."
+        : "백엔드 요청 중 오류가 발생했습니다.";
+
+    return Response.json({ error: message }, { status: 504 });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export const dynamic = "force-dynamic";

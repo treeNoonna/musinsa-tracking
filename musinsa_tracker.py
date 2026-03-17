@@ -309,7 +309,18 @@ class MusinsaTracker:
 
     def _get_page_snapshot(self, url: str) -> tuple[str | None, str | None, str, list[str]]:
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=True)
+            browser = playwright.chromium.launch(
+                headless=True,
+                args=[
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                    "--disable-setuid-sandbox",
+                    "--no-sandbox",
+                    "--no-zygote",
+                    "--single-process",
+                ],
+                timeout=30_000,
+            )
             context = browser.new_context(
                 locale="ko-KR",
                 user_agent=(
@@ -318,6 +329,7 @@ class MusinsaTracker:
                     "Chrome/135.0.0.0 Safari/537.36"
                 ),
                 viewport={"width": 1440, "height": 1200},
+                ignore_https_errors=True,
             )
             page = context.new_page()
             try:
