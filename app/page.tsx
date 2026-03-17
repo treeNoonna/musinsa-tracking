@@ -5,7 +5,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { PriceChart } from "@/components/price-chart";
 import type { HistoryResponse, Product, UpdateResult } from "@/lib/types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+const API_BASE = "/api/proxy";
 const READ_TIMEOUT_MS = 15_000;
 const WRITE_TIMEOUT_MS = 120_000;
 
