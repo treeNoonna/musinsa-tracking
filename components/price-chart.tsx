@@ -7,10 +7,11 @@ type PriceChartProps = {
 };
 
 const WIDTH = 680;
-const HEIGHT = 250;
-const PAD_X = 28;
+const HEIGHT = 320;
+const PAD_LEFT = 72;
+const PAD_RIGHT = 24;
 const PAD_TOP = 28;
-const PAD_BOTTOM = 44;
+const PAD_BOTTOM = 56;
 
 function toKrw(value: number): string {
   return `${value.toLocaleString("ko-KR")}원`;
@@ -34,16 +35,22 @@ export function PriceChart({ points }: PriceChartProps) {
   const max = Math.max(...prices);
   const range = max - min || 1;
 
-  const xStep = sorted.length > 1 ? (WIDTH - PAD_X * 2) / (sorted.length - 1) : 0;
+  const xStep = sorted.length > 1 ? (WIDTH - PAD_LEFT - PAD_RIGHT) / (sorted.length - 1) : 0;
 
   const coords = sorted.map((p, i) => {
-    const x = PAD_X + xStep * i;
+    const x = PAD_LEFT + xStep * i;
     const y = HEIGHT - PAD_BOTTOM - ((p.price - min) / range) * (HEIGHT - PAD_TOP - PAD_BOTTOM);
     return { x, y, price: p.price, checkedAt: p.checked_at };
   });
 
   const line = coords.map((c) => `${c.x},${c.y}`).join(" ");
   const tickIndexes = Array.from(new Set([0, Math.floor((coords.length - 1) / 2), coords.length - 1]));
+  const yTicks = Array.from({ length: 4 }, (_, idx) => {
+    const ratio = idx / 3;
+    const value = Math.round(max - (max - min) * ratio);
+    const y = PAD_TOP + (HEIGHT - PAD_TOP - PAD_BOTTOM) * ratio;
+    return { value, y };
+  });
 
   return (
     <div className="chartWrap" aria-label="price trend chart" role="img">
@@ -54,13 +61,35 @@ export function PriceChart({ points }: PriceChartProps) {
             <stop offset="100%" stopColor="#F97316" />
           </linearGradient>
         </defs>
-        <line x1={PAD_X} y1={PAD_TOP} x2={PAD_X} y2={HEIGHT - PAD_BOTTOM} stroke="#cbd5e1" />
+        {yTicks.map((tick) => (
+          <g key={`y-${tick.value}-${tick.y}`}>
+            <line
+              x1={PAD_LEFT}
+              y1={tick.y}
+              x2={WIDTH - PAD_RIGHT}
+              y2={tick.y}
+              stroke="rgba(255,255,255,0.08)"
+              strokeDasharray="4 6"
+            />
+            <text
+              x={PAD_LEFT - 10}
+              y={tick.y + 4}
+              fontSize="12"
+              fill="#b8bcc6"
+              textAnchor="end"
+            >
+              {toKrw(tick.value)}
+            </text>
+          </g>
+        ))}
+
+        <line x1={PAD_LEFT} y1={PAD_TOP} x2={PAD_LEFT} y2={HEIGHT - PAD_BOTTOM} stroke="#53555b" />
         <line
-          x1={PAD_X}
+          x1={PAD_LEFT}
           y1={HEIGHT - PAD_BOTTOM}
-          x2={WIDTH - PAD_X}
+          x2={WIDTH - PAD_RIGHT}
           y2={HEIGHT - PAD_BOTTOM}
-          stroke="#cbd5e1"
+          stroke="#53555b"
         />
 
         <polyline
@@ -74,9 +103,9 @@ export function PriceChart({ points }: PriceChartProps) {
 
         {coords.map((c, idx) => (
           <g key={`${c.x}-${c.y}-${idx}`}>
-            <circle cx={c.x} cy={c.y} r="4.5" fill="#1e40af" />
+            <circle cx={c.x} cy={c.y} r="5" fill="#f5f5f5" stroke="#1e40af" strokeWidth="2.5" />
             {idx === coords.length - 1 ? (
-              <text x={c.x - 8} y={c.y - 12} fontSize="11" fill="#1e40af" textAnchor="end">
+              <text x={c.x - 8} y={c.y - 14} fontSize="12" fill="#f5f5f5" textAnchor="end">
                 {toKrw(c.price)}
               </text>
             ) : null}
@@ -89,9 +118,9 @@ export function PriceChart({ points }: PriceChartProps) {
             <text
               key={`tick-${idx}`}
               x={point.x}
-              y={HEIGHT - 12}
-              fontSize="11"
-              fill="#64748b"
+              y={HEIGHT - 16}
+              fontSize="12"
+              fill="#b8bcc6"
               textAnchor={idx === 0 ? "start" : idx === coords.length - 1 ? "end" : "middle"}
             >
               {toDateLabel(point.checkedAt)}

@@ -30,7 +30,10 @@ curl http://127.0.0.1:8000/health
 ```bash
 cd /Users/juwon/musinsa-scrap
 npm install
-NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000 npm run dev
+NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000 \
+NEXT_PUBLIC_SUPABASE_URL=https://<your-project>.supabase.co \
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<your-anon-key> \
+npm run dev
 ```
 
 브라우저:
@@ -50,6 +53,33 @@ NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000 npm run dev
 - CORS 허용 origin: `http://localhost:3000`, `http://127.0.0.1:3000`
 - 무신사 DOM 변경 시 가격 선택자 보정이 필요할 수 있습니다.
 - 현재 백엔드는 `backend/scraper-worker`만 사용합니다.
+
+## Supabase Google 로그인 + 저장
+
+프론트 헤더의 `로그인하고 저장하기` 버튼은 Supabase Auth의 Google 로그인 후 현재 추적 중인 상품 목록을 `saved_products` 테이블에 사용자별로 저장합니다.
+
+필수 환경변수:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+
+Supabase 설정 순서:
+
+1. Supabase 프로젝트 생성
+2. Authentication > Providers 에서 `Google` 활성화
+3. Google OAuth redirect URL로 아래 추가
+   - 로컬: `http://127.0.0.1:3000`
+   - 배포: `https://musinsa-tracking.vercel.app`
+4. SQL Editor에서 [supabase/saved_products.sql](/Users/juwon/musinsa-scrap/supabase/saved_products.sql) 실행
+
+저장되는 값:
+
+- 사용자 ID
+- 상품 URL
+- 상품명
+- 이미지 URL
+- 마지막 가격
+- 마지막 체크 시간
 
 ## Fly.io 배포
 

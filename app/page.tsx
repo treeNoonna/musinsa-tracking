@@ -1,9 +1,11 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import type { User } from "@supabase/supabase-js";
 
 import { PriceChart } from "@/components/price-chart";
-import type { HistoryResponse, Product, UpdateResult } from "@/lib/types";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import type { HistoryResponse, Product, SavedProductRow, UpdateResult } from "@/lib/types";
 
 const API_BASE = "/api/proxy";
 const READ_TIMEOUT_MS = 15_000;
@@ -69,6 +71,7 @@ function cleanProductLabel(value: string | null | undefined): string {
 }
 
 export default function Page() {
+  const supabase = getSupabaseBrowserClient();
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [history, setHistory] = useState<HistoryResponse | null>(null);
@@ -79,6 +82,9 @@ export default function Page() {
   const [syncingId, setSyncingId] = useState<number | "all" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [saveBusy, setSaveBusy] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
 
   const selected = useMemo(
     () => products.find((p) => p.id === selectedId) ?? null,
@@ -94,6 +100,93 @@ export default function Page() {
     return { max: Math.max(...prices), min: Math.min(...prices) };
   }, [history]);
   const isBusy = loading || syncing;
+  const isCloudReady = Boolean(supabase);
+
+  async function loadSavedCount(userId: string) {
+    if (!supabase) {
+      return;
+    }
+    const { count, error: saveError } = await supabase
+      .from("saved_products")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", userId);
+
+    if (saveError) {
+      throw saveError;
+    }
+
+    void count;
+  }
+
+  async function persistProducts(targetUser: User, items: Product[]) {
+    if (!supabase) {
+      throw new Error("Supabase 설정이 필요합니다.");
+    }
+    if (items.length === 0) {
+      throw new Error("저장할 상품이 없습니다.");
+    }
+
+    const payload: SavedProductRow[] = items.map((product) => ({
+      user_id: targetUser.id,
+      product_url: product.url,
+      product_name: product.name,
+      image_url: product.image_url,
+      last_price: product.last_price,
+      last_checked_at: product.last_checked_at,
+      source: "musinsa-price-tracker",
+    }));
+
+    const { error: saveError } = await supabase
+      .from("saved_products")
+      .upsert(payload, { onConflict: "user_id,product_url" });
+
+    if (saveError) {
+      throw saveError;
+    }
+
+    await loadSavedCount(targetUser.id);
+  }
+
+  async function handleCloudSave() {
+    if (!isCloudReady) {
+      setError("Supabase 환경변수가 설정되지 않았습니다.");
+      return;
+    }
+
+    setMessage(null);
+    setError(null);
+
+    if (!user) {
+      sessionStorage.setItem("pending-cloud-save", "1");
+      const redirectTo = window.location.href;
+      const { error: signInError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo },
+      });
+      if (signInError) {
+        sessionStorage.removeItem("pending-cloud-save");
+        setError(signInError.message);
+      }
+      return;
+    }
+
+    setSaveBusy(true);
+    try {
+      await persistProducts(user, products);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "failed to save products");
+    } finally {
+      setSaveBusy(false);
+    }
+  }
+
+  async function handleSignOut() {
+    if (!supabase) {
+      return;
+    }
+    await supabase.auth.signOut();
+    setUser(null);
+  }
 
   async function loadProducts() {
     const data = await apiFetchJson<{ products?: Product[] }>(`${API_BASE}/api/products`);
@@ -120,6 +213,80 @@ export default function Page() {
         setBusyMessage(null);
       });
   }, []);
+
+  useEffect(() => {
+    if (!supabase) {
+      setAuthLoading(false);
+      return;
+    }
+
+    let mounted = true;
+
+    const bootstrapAuth = async () => {
+      const { data, error: authError } = await supabase.auth.getUser();
+      if (!mounted) {
+        return;
+      }
+      if (authError) {
+        setError(authError.message);
+      }
+      setUser(data.user ?? null);
+      if (data.user) {
+        try {
+          await loadSavedCount(data.user.id);
+        } catch (e) {
+          if (mounted) {
+            setError(e instanceof Error ? e.message : "failed to load saved count");
+          }
+        }
+      }
+      if (mounted) {
+        setAuthLoading(false);
+      }
+    };
+
+    void bootstrapAuth();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      const nextUser = session?.user ?? null;
+      setUser(nextUser);
+      setAuthLoading(false);
+      if (nextUser) {
+        void loadSavedCount(nextUser.id).catch((e) =>
+          setError(e instanceof Error ? e.message : "failed to load saved count"),
+        );
+      }
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [supabase]);
+
+  useEffect(() => {
+    if (!supabase || !user || products.length === 0) {
+      return;
+    }
+    if (sessionStorage.getItem("pending-cloud-save") !== "1") {
+      return;
+    }
+
+    setSaveBusy(true);
+    setError(null);
+    sessionStorage.removeItem("pending-cloud-save");
+
+    persistProducts(user, products)
+      .then(() => {})
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : "failed to save products");
+      })
+      .finally(() => {
+        setSaveBusy(false);
+      });
+  }, [products, supabase, user]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -276,6 +443,35 @@ export default function Page() {
           </div>
         </div>
       ) : null}
+      <div className="authBanner" aria-live="polite">
+        {isCloudReady ? (
+          user ? (
+            <>
+              <div className="authBannerActions">
+                <span className="authPill">{user.email ?? "Google account"}</span>
+                <button className="authLink authLinkMuted" onClick={handleSignOut} type="button" disabled={saveBusy}>
+                  로그아웃
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="authBannerActions">
+              <button
+                className="authLink"
+                onClick={handleCloudSave}
+                disabled={loading || syncing || authLoading || saveBusy}
+                type="button"
+              >
+                로그인하고 저장하기
+              </button>
+            </div>
+          )
+        ) : (
+          <div className="authBannerActions">
+            <span className="authPill">Supabase not configured</span>
+          </div>
+        )}
+      </div>
       <section className="pageFrame">
         <header className="topbar">
           <div>

@@ -31,3 +31,13 @@ export type HistoryResponse = {
   product: Product;
   history: PricePoint[];
 };
+
+export type SavedProductRow = {
+  user_id: string;
+  product_url: string;
+  product_name: string | null;
+  image_url: string | null;
+  last_price: number | null;
+  last_checked_at: string | null;
+  source: string;
+};
