@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from fastapi import Body, FastAPI, HTTPException, Query
+from fastapi import BackgroundTasks, Body, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, HttpUrl
 
@@ -59,6 +59,17 @@ def _tracker() -> MusinsaTracker:
     return MusinsaTracker(DB_PATH)
 
 
+def _hydrate_product_price(product_id: int) -> None:
+    tracker = _tracker()
+    try:
+        tracker.refresh_product(product_id)
+    except Exception:
+        # Background hydration is best-effort.
+        pass
+    finally:
+        tracker.conn.close()
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -74,10 +85,14 @@ def list_products() -> dict[str, list[dict[str, Any]]]:
 
 
 @app.post("/api/products")
-def add_product(payload: AddProductRequest) -> dict[str, Any]:
+def add_product(payload: AddProductRequest, background_tasks: BackgroundTasks) -> dict[str, Any]:
     tracker = _tracker()
     try:
-        return tracker.add_product(str(payload.url))
+        result = tracker.add_product(str(payload.url))
+        product = result.get("product")
+        if result.get("created") and isinstance(product, dict) and isinstance(product.get("id"), int):
+            background_tasks.add_task(_hydrate_product_price, product["id"])
+        return result
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     finally:

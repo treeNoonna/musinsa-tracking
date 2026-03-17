@@ -170,20 +170,33 @@ class MusinsaTracker:
             raise RuntimeError("상품 저장 실패")
 
         created = cur.rowcount != 0
-        message = "상품 등록 완료."
-
-        if created:
-            try:
-                result = self.fetch_price(clean_url)
-                self._record_price(row["id"], name, result)
-                row = self.conn.execute("SELECT * FROM products WHERE id = ?", (row["id"],)).fetchone()
-            except Exception as exc:
-                message = f"상품은 등록됐지만 초기 가격 수집은 실패했습니다: {exc}"
 
         return {
             "created": created,
             "product": self._row_to_product(row),
-            "message": message if created else "이미 등록된 상품 URL입니다.",
+            "message": (
+                "상품 등록 완료. 초기 가격은 백그라운드에서 확인 중입니다."
+                if created
+                else "이미 등록된 상품 URL입니다."
+            ),
+        }
+
+    def refresh_product(self, product_id: int) -> dict:
+        row = self.conn.execute("SELECT * FROM products WHERE id = ?", (product_id,)).fetchone()
+        if row is None:
+            raise ValueError(f"product id={product_id} 가 없습니다.")
+
+        result = self.fetch_price(row["url"])
+        new_name, checked_at = self._record_price(product_id, row["name"], result)
+        return {
+            "product_id": product_id,
+            "name": new_name,
+            "url": row["url"],
+            "ok": True,
+            "price": result.price,
+            "source": result.source,
+            "image_url": result.image_url,
+            "checked_at": checked_at,
         }
 
     def delete_product(self, product_id: int) -> dict:
@@ -473,7 +486,7 @@ class MusinsaTracker:
             pid = r["id"]
             url = r["url"]
             try:
-                result = self.fetch_price(url)
+                update = self.refresh_product(pid)
             except Exception as exc:
                 results.append(
                     {
@@ -486,19 +499,7 @@ class MusinsaTracker:
                 )
                 continue
 
-            new_name, checked_at = self._record_price(pid, r["name"], result)
-            results.append(
-                {
-                    "product_id": pid,
-                    "name": new_name,
-                    "url": url,
-                    "ok": True,
-                    "price": result.price,
-                    "source": result.source,
-                    "image_url": result.image_url,
-                    "checked_at": checked_at,
-                }
-            )
+            results.append(update)
 
         return results
 
