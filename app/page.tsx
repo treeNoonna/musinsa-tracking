@@ -6,6 +6,36 @@ import { PriceChart } from "@/components/price-chart";
 import type { HistoryResponse, Product, UpdateResult } from "@/lib/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+const READ_TIMEOUT_MS = 15_000;
+const WRITE_TIMEOUT_MS = 120_000;
+
+type ApiErrorShape = {
+  error?: string;
+  detail?: string;
+};
+
+async function apiFetchJson<T>(input: string, init?: RequestInit, timeoutMs = READ_TIMEOUT_MS): Promise<T> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(input, { ...init, signal: controller.signal, cache: "no-store" });
+    const data = (await res.json()) as T & ApiErrorShape;
+
+    if (!res.ok) {
+      throw new Error(data.error ?? data.detail ?? `request failed (${res.status})`);
+    }
+
+    return data;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("요청 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.");
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
 
 function krw(value: number | null | undefined): string {
   if (value === null || value === undefined) {
@@ -66,12 +96,7 @@ export default function Page() {
   const isBusy = loading || syncing;
 
   async function loadProducts() {
-    const res = await fetch(`${API_BASE}/api/products`, { cache: "no-store" });
-    const data = (await res.json()) as { products?: Product[]; error?: string };
-    if (!res.ok) {
-      throw new Error(data.error ?? "failed to load products");
-    }
-
+    const data = await apiFetchJson<{ products?: Product[] }>(`${API_BASE}/api/products`);
     const nextProducts = data.products ?? [];
     setProducts(nextProducts);
 
@@ -81,13 +106,7 @@ export default function Page() {
   }
 
   async function loadProductDetails(productId: number) {
-    const hRes = await fetch(`${API_BASE}/api/products/${productId}/history?limit=40`, { cache: "no-store" });
-    const hData = (await hRes.json()) as HistoryResponse & { error?: string };
-
-    if (!hRes.ok) {
-      throw new Error(hData.error ?? "failed to load history");
-    }
-
+    const hData = await apiFetchJson<HistoryResponse>(`${API_BASE}/api/products/${productId}/history?limit=40`);
     setHistory(hData);
   }
 
@@ -128,15 +147,11 @@ export default function Page() {
     setError(null);
 
     try {
-      const res = await fetch(`${API_BASE}/api/products`, {
+      const data = await apiFetchJson<{ message?: string; product?: Product }>(`${API_BASE}/api/products`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: url.trim() }),
-      });
-      const data = (await res.json()) as { message?: string; product?: Product; error?: string };
-      if (!res.ok) {
-        throw new Error(data.error ?? "failed to add product");
-      }
+      }, WRITE_TIMEOUT_MS);
 
       setMessage(data.message ?? "Product added.");
       setUrl("");
@@ -160,15 +175,11 @@ export default function Page() {
     setMessage(null);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/api/products/update`, {
+      const data = await apiFetchJson<{ updates?: UpdateResult[] }>(`${API_BASE}/api/products/update`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
-      });
-      const data = (await res.json()) as { updates?: UpdateResult[]; error?: string };
-      if (!res.ok) {
-        throw new Error(data.error ?? "failed to update all products");
-      }
+      }, WRITE_TIMEOUT_MS);
 
       const okCount = (data.updates ?? []).filter((u) => u.ok).length;
       setMessage(`${okCount} products updated`);
@@ -195,11 +206,11 @@ export default function Page() {
     setError(null);
 
     try {
-      const res = await fetch(`${API_BASE}/api/products/${id}/update`, { method: "POST" });
-      const data = (await res.json()) as { updates?: UpdateResult[]; error?: string };
-      if (!res.ok) {
-        throw new Error(data.error ?? "failed to update product");
-      }
+      const data = await apiFetchJson<{ updates?: UpdateResult[] }>(
+        `${API_BASE}/api/products/${id}/update`,
+        { method: "POST" },
+        WRITE_TIMEOUT_MS,
+      );
 
       const one = data.updates?.[0];
       if (one?.ok) {
@@ -231,11 +242,7 @@ export default function Page() {
     setError(null);
 
     try {
-      const res = await fetch(`${API_BASE}/api/products/${id}`, { method: "DELETE" });
-      const data = (await res.json()) as { deleted?: boolean; error?: string };
-      if (!res.ok) {
-        throw new Error(data.error ?? "failed to delete product");
-      }
+      await apiFetchJson<{ deleted?: boolean }>(`${API_BASE}/api/products/${id}`, { method: "DELETE" }, WRITE_TIMEOUT_MS);
 
       setMessage(`${label}\nProduct deleted`);
       await loadProducts();
