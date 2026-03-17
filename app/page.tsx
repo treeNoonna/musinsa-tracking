@@ -148,7 +148,8 @@ export default function Page() {
   }
 
   async function handleCloudSave() {
-    if (!isCloudReady) {
+    const client = supabase;
+    if (!client) {
       setError("Supabase 환경변수가 설정되지 않았습니다.");
       return;
     }
@@ -159,7 +160,7 @@ export default function Page() {
     if (!user) {
       sessionStorage.setItem("pending-cloud-save", "1");
       const redirectTo = window.location.href;
-      const { error: signInError } = await supabase.auth.signInWithOAuth({
+      const { error: signInError } = await client.auth.signInWithOAuth({
         provider: "google",
         options: { redirectTo },
       });
@@ -181,10 +182,11 @@ export default function Page() {
   }
 
   async function handleSignOut() {
-    if (!supabase) {
+    const client = supabase;
+    if (!client) {
       return;
     }
-    await supabase.auth.signOut();
+    await client.auth.signOut();
     setUser(null);
   }
 
