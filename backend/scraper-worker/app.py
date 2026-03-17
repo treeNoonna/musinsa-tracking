@@ -25,10 +25,18 @@ def _allowed_origins() -> list[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
+def _allowed_origin_regex() -> str:
+    return os.getenv(
+        "CORS_ALLOWED_ORIGIN_REGEX",
+        r"https://([a-z0-9-]+\.)*vercel\.app",
+    )
+
+
 app = FastAPI(title="Musinsa Price Tracker API", version="0.2.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins(),
+    allow_origin_regex=_allowed_origin_regex(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
