@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import html
 import json
 import re
 import sqlite3
@@ -21,6 +22,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
@@ -448,7 +451,65 @@ class MusinsaTracker:
         fallback_values = parse_krw(body_text)
         return labeled_values, keyword_values or selector_values, fallback_values
 
+    def _fetch_html_snapshot(self, url: str) -> ScrapeResult | None:
+        request = Request(
+            url,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/135.0.0.0 Safari/537.36"
+                ),
+                "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+            },
+        )
+        try:
+            with urlopen(request, timeout=20) as response:
+                charset = response.headers.get_content_charset() or "utf-8"
+                html_text = response.read().decode(charset, errors="replace")
+        except (HTTPError, URLError, TimeoutError):
+            return None
+
+        meta_price = re.search(
+            r'<meta[^>]+property=["\']product:price:amount["\'][^>]+content=["\'](\d+)["\']',
+            html_text,
+            flags=re.IGNORECASE,
+        )
+        if not meta_price:
+            meta_price = re.search(
+                r'<meta[^>]+name=["\']description["\'][^>]+content=["\'][^"\']*?-\s*([0-9][0-9,]*)["\']',
+                html_text,
+                flags=re.IGNORECASE,
+            )
+        if not meta_price:
+            return None
+
+        raw_price = meta_price.group(1).replace(",", "")
+        price = int(raw_price)
+        if not (5000 <= price <= 10_000_000):
+            return None
+
+        def meta_value(pattern: str) -> str | None:
+            match = re.search(pattern, html_text, flags=re.IGNORECASE)
+            if not match:
+                return None
+            return html.unescape(match.group(1)).strip()
+
+        title = meta_value(r'<meta[^>]+property=["\']og:title["\'][^>]+content=["\']([^"\']+)["\']')
+        image_url = meta_value(r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']')
+
+        return ScrapeResult(
+            price=price,
+            source="html:meta-price",
+            title=self._clean_product_title(title),
+            image_url=image_url,
+        )
+
     def fetch_price(self, url: str) -> ScrapeResult:
+        html_result = self._fetch_html_snapshot(url)
+        if html_result is not None:
+            return html_result
+
         title, image_url, body_text, labeled_contexts = self._get_page_snapshot(url)
         title = self._clean_product_title(title)
         image_url = self._normalize_text(image_url) or None
