@@ -56,7 +56,7 @@ npm run dev
 
 ## Supabase Google 로그인 + 저장
 
-프론트 헤더의 `로그인하고 저장하기` 버튼은 Supabase Auth의 Google 로그인 후 현재 추적 중인 상품 목록을 `saved_products` 테이블에 사용자별로 저장합니다.
+프론트 헤더의 `로그인` 버튼은 Supabase Auth의 Google 로그인 후 현재 추적 중인 상품 목록을 `saved_products` 테이블에 사용자별로 저장합니다.
 
 필수 환경변수:
 

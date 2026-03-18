@@ -561,7 +561,7 @@ export default function Page() {
                 disabled={loading || syncing || authLoading || saveBusy}
                 type="button"
               >
-                로그인하고 저장하기
+                로그인
               </button>
             </div>
           )
@@ -634,17 +634,23 @@ export default function Page() {
                     {products.map((p) => (
                       <tr
                         key={p.id}
-                        onClick={() => setSelectedId(p.id)}
-                        style={{ cursor: "pointer" }}
                         aria-selected={selectedId === p.id}
                       >
                         <td className="productCol">
                           <div className="productCell">
-                            {p.image_url ? (
-                              <img className="thumb" src={p.image_url} alt={p.name ?? "상품 이미지"} />
-                            ) : (
-                              <div className="thumb thumbFallback" aria-hidden="true" />
-                            )}
+                            <button
+                              className="thumbButton"
+                              type="button"
+                              onClick={() => setSelectedId(p.id)}
+                              aria-label={`${p.name ?? "상품"} 선택`}
+                              aria-pressed={selectedId === p.id}
+                            >
+                              {p.image_url ? (
+                                <img className="thumb" src={p.image_url} alt={p.name ?? "상품 이미지"} />
+                              ) : (
+                                <div className="thumb thumbFallback" aria-hidden="true" />
+                              )}
+                            </button>
                             <div className="productMeta">
                               <div className="productName">{p.name ?? "(이름없음)"}</div>
                               <button
