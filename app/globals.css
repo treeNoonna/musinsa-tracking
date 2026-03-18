@@ -273,28 +273,6 @@ select {
   min-width: 0;
 }
 
-.thumbButton {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  padding: 0;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-}
-
-.thumbButton:focus {
-  outline: 2px solid rgba(255, 255, 255, 0.34);
-  outline-offset: 3px;
-  border-radius: 16px;
-}
-
-.thumbButton[aria-pressed="true"] .thumb {
-  border-color: rgba(125, 240, 174, 0.9);
-  box-shadow: 0 0 0 2px rgba(125, 240, 174, 0.22);
-}
-
 .productName {
   font-weight: 800;
   line-height: 1.4;

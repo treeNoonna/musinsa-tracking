@@ -634,23 +634,26 @@ export default function Page() {
                     {products.map((p) => (
                       <tr
                         key={p.id}
+                        onClick={() => setSelectedId(p.id)}
+                        style={{ cursor: "pointer" }}
                         aria-selected={selectedId === p.id}
                       >
                         <td className="productCol">
                           <div className="productCell">
-                            <button
-                              className="thumbButton"
-                              type="button"
-                              onClick={() => setSelectedId(p.id)}
-                              aria-label={`${p.name ?? "상품"} 선택`}
-                              aria-pressed={selectedId === p.id}
-                            >
-                              {p.image_url ? (
-                                <img className="thumb" src={p.image_url} alt={p.name ?? "상품 이미지"} />
-                              ) : (
-                                <div className="thumb thumbFallback" aria-hidden="true" />
-                              )}
-                            </button>
+                            {p.image_url ? (
+                              <img
+                                className="thumb"
+                                src={p.image_url}
+                                alt={p.name ?? "상품 이미지"}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            ) : (
+                              <div
+                                className="thumb thumbFallback"
+                                aria-hidden="true"
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            )}
                             <div className="productMeta">
                               <div className="productName">{p.name ?? "(이름없음)"}</div>
                               <button
