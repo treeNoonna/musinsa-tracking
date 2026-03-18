@@ -15,6 +15,27 @@ function buildTargetUrl(req: NextRequest, path: string[]) {
   return url;
 }
 
+function getProxyErrorMessage(error: unknown): string {
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return "백엔드 응답 시간이 초과되었습니다.";
+  }
+
+  const cause =
+    typeof error === "object" &&
+    error !== null &&
+    "cause" in error &&
+    typeof (error as { cause?: unknown }).cause === "object" &&
+    (error as { cause?: unknown }).cause !== null
+      ? ((error as { cause: { code?: unknown } }).cause.code ?? null)
+      : null;
+
+  if (cause === "ECONNREFUSED" || cause === "ECONNRESET" || cause === "ENOTFOUND") {
+    return `백엔드에 연결할 수 없습니다. 현재 대상: ${BACKEND_BASE}`;
+  }
+
+  return "백엔드 요청 중 오류가 발생했습니다.";
+}
+
 async function proxy(req: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   const { path } = await context.params;
   const targetUrl = buildTargetUrl(req, path);
@@ -45,12 +66,7 @@ async function proxy(req: NextRequest, context: { params: Promise<{ path: string
       },
     });
   } catch (error) {
-    const message =
-      error instanceof DOMException && error.name === "AbortError"
-        ? "백엔드 응답 시간이 초과되었습니다."
-        : "백엔드 요청 중 오류가 발생했습니다.";
-
-    return Response.json({ error: message }, { status: 504 });
+    return Response.json({ error: getProxyErrorMessage(error) }, { status: 504 });
   } finally {
     clearTimeout(timer);
   }

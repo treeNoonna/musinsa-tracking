@@ -4,17 +4,44 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 
 import { PriceChart } from "@/components/price-chart";
-import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { clearSupabaseBrowserAuthState, getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { HistoryResponse, Product, SavedProductRow, UpdateResult } from "@/lib/types";
 
 const API_BASE = "/api/proxy";
 const READ_TIMEOUT_MS = 15_000;
 const WRITE_TIMEOUT_MS = 120_000;
+const PENDING_CLOUD_SAVE_KEY = "pending-cloud-save";
+const OAUTH_FLOW_KEY = "oauth-login-in-flight";
 
 type ApiErrorShape = {
   error?: string;
   detail?: string;
 };
+
+function getErrorMessage(error: unknown): string | null {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const { message } = error as { message?: unknown };
+    return typeof message === "string" ? message : null;
+  }
+  return null;
+}
+
+function isAuthSessionMissingError(error: unknown): boolean {
+  const message = getErrorMessage(error);
+  return message ? /auth session missing/i.test(message) : false;
+}
+
+function isInvalidRefreshTokenError(error: unknown): boolean {
+  const message = getErrorMessage(error);
+  return message ? /invalid refresh token|refresh token not found/i.test(message) : false;
+}
+
+function isExpectedSignedOutError(error: unknown): boolean {
+  return isAuthSessionMissingError(error) || isInvalidRefreshTokenError(error);
+}
 
 async function apiFetchJson<T>(input: string, init?: RequestInit, timeoutMs = READ_TIMEOUT_MS): Promise<T> {
   const controller = new AbortController();
@@ -78,6 +105,7 @@ export default function Page() {
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
   const [syncingId, setSyncingId] = useState<number | "all" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -112,6 +140,9 @@ export default function Page() {
       .eq("user_id", userId);
 
     if (saveError) {
+      if (isExpectedSignedOutError(saveError)) {
+        return;
+      }
       throw saveError;
     }
 
@@ -158,14 +189,21 @@ export default function Page() {
     setError(null);
 
     if (!user) {
-      sessionStorage.setItem("pending-cloud-save", "1");
+      sessionStorage.setItem(PENDING_CLOUD_SAVE_KEY, "1");
+      sessionStorage.setItem(OAUTH_FLOW_KEY, "1");
       const redirectTo = window.location.href;
       const { error: signInError } = await client.auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo },
+        options: {
+          redirectTo,
+          queryParams: {
+            prompt: "consent select_account",
+          },
+        },
       });
       if (signInError) {
-        sessionStorage.removeItem("pending-cloud-save");
+        sessionStorage.removeItem(PENDING_CLOUD_SAVE_KEY);
+        sessionStorage.removeItem(OAUTH_FLOW_KEY);
         setError(signInError.message);
       }
       return;
@@ -175,7 +213,9 @@ export default function Page() {
     try {
       await persistProducts(user, products);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "failed to save products");
+      if (!isExpectedSignedOutError(e)) {
+        setError(e instanceof Error ? e.message : "failed to save products");
+      }
     } finally {
       setSaveBusy(false);
     }
@@ -187,7 +227,14 @@ export default function Page() {
       return;
     }
     await client.auth.signOut();
+    sessionStorage.removeItem(PENDING_CLOUD_SAVE_KEY);
+    sessionStorage.removeItem(OAUTH_FLOW_KEY);
     setUser(null);
+    setProducts([]);
+    setHistory(null);
+    setSelectedId(null);
+    setMessage(null);
+    setError(null);
   }
 
   async function loadProducts() {
@@ -206,6 +253,18 @@ export default function Page() {
   }
 
   useEffect(() => {
+    if (isCloudReady) {
+      if (authLoading) {
+        return;
+      }
+      if (!user) {
+        setProducts([]);
+        setHistory(null);
+        setSelectedId(null);
+        return;
+      }
+    }
+
     setLoading(true);
     setBusyMessage("등록된 상품을 불러오는 중...");
     loadProducts()
@@ -214,7 +273,7 @@ export default function Page() {
         setLoading(false);
         setBusyMessage(null);
       });
-  }, []);
+  }, [authLoading, isCloudReady, user]);
 
   useEffect(() => {
     if (!supabase) {
@@ -225,11 +284,17 @@ export default function Page() {
     let mounted = true;
 
     const bootstrapAuth = async () => {
+      const oauthFlowInFlight = sessionStorage.getItem(OAUTH_FLOW_KEY) === "1";
+
+      if (!oauthFlowInFlight) {
+        clearSupabaseBrowserAuthState();
+      }
+
       const { data, error: authError } = await supabase.auth.getUser();
       if (!mounted) {
         return;
       }
-      if (authError) {
+      if (authError && !isExpectedSignedOutError(authError)) {
         setError(authError.message);
       }
       setUser(data.user ?? null);
@@ -243,6 +308,7 @@ export default function Page() {
         }
       }
       if (mounted) {
+        sessionStorage.removeItem(OAUTH_FLOW_KEY);
         setAuthLoading(false);
       }
     };
@@ -251,14 +317,32 @@ export default function Page() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       const nextUser = session?.user ?? null;
       setUser(nextUser);
       setAuthLoading(false);
+      if (event === "SIGNED_IN") {
+        sessionStorage.removeItem(OAUTH_FLOW_KEY);
+      }
       if (nextUser) {
+        void loadProducts().catch((e) => {
+          setError(e instanceof Error ? e.message : "failed to load");
+        });
         void loadSavedCount(nextUser.id).catch((e) =>
-          setError(e instanceof Error ? e.message : "failed to load saved count"),
+          {
+            if (!isExpectedSignedOutError(e)) {
+              setError(e instanceof Error ? e.message : "failed to load saved count");
+            }
+          },
         );
+      } else if (event === "SIGNED_OUT") {
+        sessionStorage.removeItem(PENDING_CLOUD_SAVE_KEY);
+        sessionStorage.removeItem(OAUTH_FLOW_KEY);
+        setProducts([]);
+        setHistory(null);
+        setSelectedId(null);
+        setMessage(null);
+        setError(null);
       }
     });
 
@@ -272,18 +356,20 @@ export default function Page() {
     if (!supabase || !user || products.length === 0) {
       return;
     }
-    if (sessionStorage.getItem("pending-cloud-save") !== "1") {
+    if (sessionStorage.getItem(PENDING_CLOUD_SAVE_KEY) !== "1") {
       return;
     }
 
     setSaveBusy(true);
     setError(null);
-    sessionStorage.removeItem("pending-cloud-save");
+    sessionStorage.removeItem(PENDING_CLOUD_SAVE_KEY);
 
     persistProducts(user, products)
       .then(() => {})
       .catch((e) => {
-        setError(e instanceof Error ? e.message : "failed to save products");
+        if (!isExpectedSignedOutError(e)) {
+          setError(e instanceof Error ? e.message : "failed to save products");
+        }
       })
       .finally(() => {
         setSaveBusy(false);
@@ -294,13 +380,11 @@ export default function Page() {
     if (!selectedId) {
       return;
     }
-    setLoading(true);
-    setBusyMessage("가격 이력과 요약 정보를 불러오는 중...");
+    setDetailLoading(true);
     loadProductDetails(selectedId)
       .catch((e) => setError(e instanceof Error ? e.message : "failed to load details"))
       .finally(() => {
-        setLoading(false);
-        setBusyMessage(null);
+        setDetailLoading(false);
       });
   }, [selectedId]);
 
@@ -606,6 +690,7 @@ export default function Page() {
           <aside className="right">
             <article className="card">
               <h2>Summary</h2>
+              {detailLoading ? <p className="detailNotice">선택한 상품 정보를 불러오는 중...</p> : null}
               {!selected ? (
                 <p className="empty">상품을 선택하세요.</p>
               ) : (
@@ -643,6 +728,7 @@ export default function Page() {
 
             <article className="card">
               <h2>가격 추이</h2>
+              {detailLoading ? <p className="detailNotice">가격 이력을 불러오는 중...</p> : null}
               <PriceChart points={history?.history ?? []} />
             </article>
           </aside>

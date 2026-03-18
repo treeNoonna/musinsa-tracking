@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --hostname 127.0.0.1 --port 3000",
+    "dev": "npm run dev:local",
     "dev:frontend": "next dev --hostname 127.0.0.1 --port 3000",
     "dev:backend": "cd backend/scraper-worker && python3.11 -m uvicorn app:app --host 127.0.0.1 --port 8000",
     "dev:local": "sh -c 'if lsof -tiTCP:8000 -sTCP:LISTEN >/dev/null 2>&1; then echo \"backend already running on 8000\"; else npm run dev:backend & fi; npm run dev:frontend'",
