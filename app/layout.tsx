@@ -33,6 +33,7 @@ const firaCode = Fira_Code({
 
 const siteUrl = getSiteUrl();
 const socialImageUrl = getAbsoluteUrl(SITE_OG_IMAGE_PATH);
+const iconVersion = "20260319b";
 
 export const viewport: Viewport = {
   themeColor: "#050505",
@@ -95,14 +96,20 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/favicon.ico", sizes: "any" },
-      { url: "/branding/musinsa-mark.svg", type: "image/svg+xml" },
-      { url: "/branding/favicon-512.png", sizes: "512x512", type: "image/png" },
-      { url: "/branding/favicon-192.png", sizes: "192x192", type: "image/png" },
-      { url: "/branding/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: `/branding/favicon-32.png?v=${iconVersion}`, sizes: "32x32", type: "image/png" },
+      { url: `/branding/favicon-192.png?v=${iconVersion}`, sizes: "192x192", type: "image/png" },
+      { url: `/branding/favicon-512.png?v=${iconVersion}`, sizes: "512x512", type: "image/png" },
+      { url: `/favicon.ico?v=${iconVersion}`, sizes: "any", type: "image/x-icon" },
+      { url: `/branding/musinsa-mark.svg?v=${iconVersion}`, type: "image/svg+xml" },
     ],
-    shortcut: [{ url: "/favicon.ico", sizes: "any" }],
-    apple: [{ url: "/branding/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+    shortcut: [{ url: `/favicon.ico?v=${iconVersion}`, sizes: "any", type: "image/x-icon" }],
+    apple: [
+      {
+        url: `/branding/apple-touch-icon.png?v=${iconVersion}`,
+        sizes: "180x180",
+        type: "image/png",
+      },
+    ],
   },
 };
 
