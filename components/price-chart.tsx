@@ -54,7 +54,7 @@ export function PriceChart({ points }: PriceChartProps) {
 
   return (
     <div className="chartWrap" aria-label="price trend chart" role="img">
-      <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} width="100%" height="100%">
+      <svg className="chartSvg" viewBox={`0 0 ${WIDTH} ${HEIGHT}`} width="100%" height="100%">
         <defs>
           <linearGradient id="line-grad" x1="0" x2="1" y1="0" y2="0">
             <stop offset="0%" stopColor="#2563EB" />

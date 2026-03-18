@@ -1,5 +1,16 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Black_Han_Sans, Fira_Code, Noto_Sans_KR } from "next/font/google";
+
+import {
+  SITE_DESCRIPTION,
+  SITE_KEYWORDS,
+  SITE_NAME,
+  SITE_OG_IMAGE_PATH,
+  SITE_TITLE,
+  getAbsoluteUrl,
+  getSiteUrl,
+} from "@/lib/site";
+
 import "./globals.css";
 
 const notoSansKr = Noto_Sans_KR({
@@ -20,20 +31,105 @@ const firaCode = Fira_Code({
   weight: ["400", "500", "600", "700"],
 });
 
+const siteUrl = getSiteUrl();
+const socialImageUrl = getAbsoluteUrl(SITE_OG_IMAGE_PATH);
+
+export const viewport: Viewport = {
+  themeColor: "#050505",
+  colorScheme: "dark",
+};
+
 export const metadata: Metadata = {
-  title: "무신사가격 트래킹",
-  description: "무신사 상품 가격을 추적하고 저장하는 대시보드",
-  applicationName: "Musinsa Tracking",
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: SITE_TITLE,
+    template: `%s | ${SITE_NAME}`,
+  },
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
+  keywords: [...SITE_KEYWORDS],
+  category: "shopping",
+  classification: "price tracking dashboard",
+  referrer: "origin-when-cross-origin",
+  formatDetection: {
+    telephone: false,
+    address: false,
+    email: false,
+  },
+  alternates: {
+    canonical: "/",
+  },
+  manifest: "/manifest.webmanifest",
+  openGraph: {
+    type: "website",
+    url: siteUrl,
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    siteName: SITE_NAME,
+    locale: "ko_KR",
+    images: [
+      {
+        url: socialImageUrl,
+        width: 1200,
+        height: 630,
+        alt: `${SITE_NAME} open graph image`,
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    images: [socialImageUrl],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
   icons: {
     icon: [
+      { url: "/favicon.ico", sizes: "any" },
       { url: "/branding/musinsa-mark.svg", type: "image/svg+xml" },
       { url: "/branding/favicon-512.png", sizes: "512x512", type: "image/png" },
       { url: "/branding/favicon-192.png", sizes: "192x192", type: "image/png" },
       { url: "/branding/favicon-32.png", sizes: "32x32", type: "image/png" },
     ],
-    shortcut: [{ url: "/branding/favicon-32.png", type: "image/png" }],
+    shortcut: [{ url: "/favicon.ico", sizes: "any" }],
     apple: [{ url: "/branding/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
+};
+
+const structuredData = {
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  name: SITE_NAME,
+  applicationCategory: "ShoppingApplication",
+  operatingSystem: "Web Browser",
+  inLanguage: "ko-KR",
+  url: siteUrl,
+  description: SITE_DESCRIPTION,
+  offers: {
+    "@type": "Offer",
+    price: "0",
+    priceCurrency: "KRW",
+  },
+  publisher: {
+    "@type": "Organization",
+    name: SITE_NAME,
+    url: siteUrl,
+  },
+  featureList: [
+    "무신사 상품 URL 등록",
+    "가격 이력 차트 확인",
+    "Google 로그인 기반 저장 상품 관리",
+  ],
 };
 
 export default function RootLayout({
@@ -44,6 +140,10 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <body className={`${notoSansKr.variable} ${blackHanSans.variable} ${firaCode.variable}`}>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+        />
         {children}
       </body>
     </html>

@@ -97,6 +97,19 @@ function cleanProductLabel(value: string | null | undefined): string {
     .trim();
 }
 
+function getBusyTitle(syncing: boolean, busyMessage: string | null): string {
+  if (busyMessage?.includes("삭제")) {
+    return "상품을 삭제하는 중...";
+  }
+  if (busyMessage?.includes("등록")) {
+    return "상품을 등록하는 중...";
+  }
+  if (syncing) {
+    return "가격 정보를 가져오는 중...";
+  }
+  return "로딩 중";
+}
+
 export default function Page() {
   const supabase = getSupabaseBrowserClient();
   const [products, setProducts] = useState<Product[]>([]);
@@ -497,7 +510,7 @@ export default function Page() {
     try {
       await apiFetchJson<{ deleted?: boolean }>(`${API_BASE}/api/products/${id}`, { method: "DELETE" }, WRITE_TIMEOUT_MS);
 
-      setMessage(`${label}\nProduct deleted`);
+      setMessage(`${label}가 삭제되었습니다.`);
       await loadProducts();
       setHistory(null);
       setSelectedId((current) => {
@@ -523,7 +536,7 @@ export default function Page() {
           <div className="loadingCard">
             <span className="spinner spinnerLg" aria-hidden="true" />
             <div>
-              <strong>{syncing ? "가격 정보를 가져오는 중..." : "로딩 중"}</strong>
+              <strong>{getBusyTitle(syncing, busyMessage)}</strong>
               <p>{busyMessage ?? "잠시만 기다려주세요."}</p>
             </div>
           </div>
@@ -625,15 +638,15 @@ export default function Page() {
                         style={{ cursor: "pointer" }}
                         aria-selected={selectedId === p.id}
                       >
-                        <td>
+                        <td className="productCol">
                           <div className="productCell">
                             {p.image_url ? (
                               <img className="thumb" src={p.image_url} alt={p.name ?? "상품 이미지"} />
                             ) : (
                               <div className="thumb thumbFallback" aria-hidden="true" />
                             )}
-                            <div>
-                              <div>{p.name ?? "(이름없음)"}</div>
+                            <div className="productMeta">
+                              <div className="productName">{p.name ?? "(이름없음)"}</div>
                               <button
                                 className="productLink empty mono"
                                 type="button"
@@ -647,9 +660,13 @@ export default function Page() {
                             </div>
                           </div>
                         </td>
-                        <td className="mono colPrice">{krw(p.last_price)}</td>
-                        <td className="colChecked">{shortDateTime(p.last_checked_at)}</td>
-                        <td className="colActions">
+                        <td className="mono colPrice" data-label="현재가">
+                          {krw(p.last_price)}
+                        </td>
+                        <td className="colChecked" data-label="업데이트">
+                          {shortDateTime(p.last_checked_at)}
+                        </td>
+                        <td className="colActions" data-label="작업">
                           <div className="rowActions">
                             <button
                               className="rowBtn"
